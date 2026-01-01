@@ -1,5 +1,4 @@
-Pillow
-requests
+Pillow>=10.0.0
 keyboard
 pyttsx3
-openai
+openai>=1.0.0
