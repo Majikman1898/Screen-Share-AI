@@ -8,11 +8,69 @@ from core.screen_capture import capture_screen_as_base64
 from core.api_client import AIClient
 from core.audio import speak_text
 
+class SettingsDialog(tk.Toplevel):
+    def __init__(self, parent, current_settings, on_save):
+        super().__init__(parent)
+        self.title("Settings")
+        self.geometry("400x250")
+        self.on_save = on_save
+
+        # Modal
+        self.transient(parent)
+        self.grab_set()
+
+        # Local variables to hold temporary changes
+        self.api_key = tk.StringVar(value=current_settings.get("api_key", ""))
+        self.model_name = tk.StringVar(value=current_settings.get("model_name", "gpt-4o"))
+        self.hotkey_var = tk.StringVar(value=current_settings.get("hotkey", "ctrl+alt+s"))
+        self.include_context = tk.BooleanVar(value=current_settings.get("include_context", True))
+
+        self._create_widgets()
+
+    def _create_widgets(self):
+        main_frame = ttk.Frame(self, padding=10)
+        main_frame.pack(fill="both", expand=True)
+
+        # API Key
+        ttk.Label(main_frame, text="OpenAI API Key:").grid(row=0, column=0, sticky="w", pady=5)
+        ttk.Entry(main_frame, textvariable=self.api_key, show="*", width=30).grid(row=0, column=1, sticky="ew", pady=5)
+
+        # Model
+        ttk.Label(main_frame, text="Model:").grid(row=1, column=0, sticky="w", pady=5)
+        models = ["gpt-4o", "gpt-4-turbo"]
+        ttk.Combobox(main_frame, textvariable=self.model_name, values=models).grid(row=1, column=1, sticky="ew", pady=5)
+
+        # Hotkey
+        ttk.Label(main_frame, text="Hotkey:").grid(row=2, column=0, sticky="w", pady=5)
+        ttk.Entry(main_frame, textvariable=self.hotkey_var).grid(row=2, column=1, sticky="ew", pady=5)
+
+        # Context
+        ttk.Checkbutton(main_frame, text="Include Prior Context", variable=self.include_context).grid(row=3, column=1, sticky="w", pady=5)
+
+        # Buttons
+        btn_frame = ttk.Frame(main_frame)
+        btn_frame.grid(row=4, column=0, columnspan=2, pady=20)
+
+        ttk.Button(btn_frame, text="Save", command=self.save).pack(side="left", padx=5)
+        ttk.Button(btn_frame, text="Cancel", command=self.destroy).pack(side="left", padx=5)
+
+        main_frame.columnconfigure(1, weight=1)
+
+    def save(self):
+        new_settings = {
+            "api_key": self.api_key.get().strip(),
+            "model_name": self.model_name.get(),
+            "hotkey": self.hotkey_var.get(),
+            "include_context": self.include_context.get()
+        }
+        self.on_save(new_settings)
+        self.destroy()
+
 class ScreenReaderApp:
     def __init__(self, root):
         self.root = root
         self.root.title("AI Screen Reader")
-        self.root.geometry("600x500")
+        self.root.geometry("600x400")
 
         # Variables
         self.api_key = tk.StringVar()
@@ -31,30 +89,7 @@ class ScreenReaderApp:
         self._create_widgets()
 
     def _create_widgets(self):
-        # API Key Section
-        api_frame = ttk.LabelFrame(self.root, text="Settings", padding=10)
-        api_frame.pack(fill="x", padx=10, pady=5)
-
-        ttk.Label(api_frame, text="OpenAI API Key:").grid(row=0, column=0, sticky="w")
-        self.api_entry = ttk.Entry(api_frame, textvariable=self.api_key, show="*", width=40)
-        self.api_entry.grid(row=0, column=1, padx=5, pady=5)
-
-        ttk.Label(api_frame, text="Model:").grid(row=1, column=0, sticky="w")
-        # Only include vision-capable models
-        models = ["gpt-4o", "gpt-4-turbo"]
-        self.model_combo = ttk.Combobox(api_frame, textvariable=self.model_name, values=models)
-        self.model_combo.grid(row=1, column=1, padx=5, pady=5, sticky="w")
-
-        ttk.Label(api_frame, text="Hotkey:").grid(row=2, column=0, sticky="w")
-        self.hotkey_entry = ttk.Entry(api_frame, textvariable=self.hotkey_var)
-        self.hotkey_entry.grid(row=2, column=1, padx=5, pady=5, sticky="w")
-
-        self.set_hotkey_btn = ttk.Button(api_frame, text="Set Hotkey", command=self.update_hotkey)
-        self.set_hotkey_btn.grid(row=2, column=2, padx=5)
-
-        ttk.Checkbutton(api_frame, text="Include Prior Context", variable=self.include_context).grid(row=3, column=1, sticky="w")
-
-        # Controls
+        # Toolbar / Controls
         control_frame = ttk.Frame(self.root, padding=10)
         control_frame.pack(fill="x", padx=10)
 
@@ -62,6 +97,11 @@ class ScreenReaderApp:
         self.start_btn.pack(side="left", padx=5)
 
         ttk.Button(control_frame, text="Clear History", command=self.clear_history).pack(side="left", padx=5)
+
+        # Spacer
+        ttk.Frame(control_frame).pack(side="left", fill="x", expand=True)
+
+        ttk.Button(control_frame, text="Settings", command=self.open_settings).pack(side="right", padx=5)
 
         # Chat/Log Area
         log_frame = ttk.LabelFrame(self.root, text="Log / Conversation", padding=10)
@@ -73,6 +113,29 @@ class ScreenReaderApp:
         # Status Bar
         status_bar = ttk.Label(self.root, textvariable=self.status_var, relief="sunken", anchor="w")
         status_bar.pack(side="bottom", fill="x")
+
+    def open_settings(self):
+        current_settings = {
+            "api_key": self.api_key.get(),
+            "model_name": self.model_name.get(),
+            "hotkey": self.hotkey_var.get(),
+            "include_context": self.include_context.get()
+        }
+        SettingsDialog(self.root, current_settings, self.apply_settings)
+
+    def apply_settings(self, new_settings):
+        self.api_key.set(new_settings["api_key"])
+        self.model_name.set(new_settings["model_name"])
+        self.include_context.set(new_settings["include_context"])
+
+        old_hotkey = self.hotkey_var.get()
+        new_hotkey = new_settings["hotkey"]
+
+        if old_hotkey != new_hotkey:
+            self.hotkey_var.set(new_hotkey)
+            self.update_hotkey()
+
+        self.log("System: Settings updated.")
 
     def process_ui_queue(self):
         """Check queue for UI updates."""
@@ -107,7 +170,7 @@ class ScreenReaderApp:
         if not self.is_listening:
             api_key = self.api_key.get().strip()
             if not api_key:
-                messagebox.showerror("Error", "Please enter an OpenAI API Key.")
+                messagebox.showerror("Error", "Please enter an OpenAI API Key in Settings.")
                 return
 
             self.ai_client = AIClient(api_key, self.model_name.get())
